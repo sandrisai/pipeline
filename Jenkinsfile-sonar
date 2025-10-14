@@ -1,0 +1,47 @@
+pipeline {
+    agent {cd 
+        label 'app'
+    }
+    triggers {
+        pollSCM('* * * * *')
+    }
+    stages {
+        stage('attaching repo') {
+            steps {
+                git url: 'https://github.com/sandrisai/spring-petclinic.git', branch: 'main'
+            }
+        }
+        stage('build') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        stage('linking sonarqube') {
+            steps {
+                withCredentials([string(credentialsId: 'sonar_id_21', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv('sonar') {
+                        sh """
+                        mvn sonar:sonar \
+                            -Dsonar.projectKey=sandrisai_spring-petclinic \
+                            -Dsonar.organization=sandrisai \
+                            -Dsonar.host.url=https://sonarcloud.io \
+                            -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            junit '**/target/surefire-reports/*.xml'
+            archiveArtifacts artifacts: '**/target/*.jar'
+        }
+        success {
+            echo 'build is success'
+        }
+        failure {
+            echo 'build id fail'
+        }
+    }
+}
