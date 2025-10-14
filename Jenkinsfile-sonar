@@ -1,5 +1,5 @@
 pipeline {
-    agent {cd 
+    agent {
         label 'app'
     }
     triggers {
