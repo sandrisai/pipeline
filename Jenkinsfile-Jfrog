@@ -1,0 +1,71 @@
+pipeline{
+    agent{
+        label 'app'
+    }
+    triggers {
+        pollSCM ('* * * * *')
+    }
+    stages{
+        stage('git repo'){
+            steps {
+                git url: 'https://github.com/sandrisai/spring-petclinic.git',branch:'main'
+            }
+        }
+        stage('install pulgin') {
+            steps{
+                sh 'mvn clean package'
+            }
+        }
+        stage('configure sonarqube') {
+            steps{
+                withCredentials([string(credentialsId:'pavan_id1', variable:'SONAR_TOKEN')]){
+                    withSonarQubeEnv('saisonar'){
+                        sh """
+                            mvn sonar:sonar \
+                            -Dsonar.projectkey=sandrisai_spring-petclinic \
+                            -Dsonar.organization=sandrisai \
+                            -Dsonar.host.url=https://sonarcloud.io \
+                            -Dsonar.login=$SONAR_TOKEN
+                            """
+                    }
+                }
+            }
+        }
+        stage('configure jfrog'){
+            steps{
+                script {
+                    def server = Artifactory.server 'sainath_jfrog_id'
+                    def buildInfo = Artifactory.newBuildInfo()
+
+                    server.upload(
+                        spec: '''{
+                            "files": [
+                                {
+                                    "parttern": "target/*.jar" ,
+                                    "target" : "newrepo-libs-release-local/"
+                                    }
+                                ]
+                            }''',
+                            buildInfo: buildInfo
+                    )
+                    server.publishBuildInfo(buildInfo)
+                    
+
+                }
+            }
+        }
+    }
+    post{
+        always{
+            junit '**/target/surefire-reports/*.xml'
+            archiveArtifacts artifacts: '**/target/*.jar'
+        }
+        success{
+            echo 'build is success'
+        }
+        failure{
+            echo 'build is fail'
+        }
+    }
+
+}
